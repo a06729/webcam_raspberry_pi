@@ -102,10 +102,12 @@ class WifiProvisioner:
 
     # --- BLE 콜백 (bless 이벤트 루프에서 호출) --------------------- #
     def _on_read(self, characteristic: BlessGATTCharacteristic, **kwargs) -> bytearray:
-        return characteristic.value or bytearray(b'{"status": "waiting"}')
+        if characteristic is None or not characteristic.value:
+            return bytearray(b'{"status": "waiting"}')
+        return characteristic.value
 
     def _on_write(self, characteristic: BlessGATTCharacteristic, value: bytearray, **kwargs) -> None:
-        if characteristic.uuid.lower() != CREDS_CHAR_UUID:
+        if characteristic is None or characteristic.uuid.lower() != CREDS_CHAR_UUID:
             return
         self._buffer.extend(value)
         if b"\n" not in self._buffer:
