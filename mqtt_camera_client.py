@@ -136,6 +136,12 @@ class CameraClient:
 
 
 def main() -> None:
+    # 와이파이가 안 붙어 있으면 BLE 프로비저닝으로 노트북에서
+    # SSID/비밀번호를 받아 연결한 뒤에 MQTT 로 진행한다.
+    if settings.ble_provision:
+        from wifi_provision import ensure_wifi
+        ensure_wifi()
+
     # API 서버에 기기 등록 (upsert — 매 시작마다 호출해도 안전).
     # 등록돼야 서버가 이 기기의 image/status 토픽을 구독한다.
     register_device()

@@ -43,5 +43,11 @@ class Settings(BaseSettings):
     # 상태(online) 주기 보고 간격(초). 0 이면 비활성.
     status_interval: int = 60
 
+    # --- BLE 와이파이 프로비저닝 ---
+    # 시작 시 와이파이가 안 붙어 있으면 BLE 로 SSID/비밀번호를 수신해 연결한다.
+    ble_provision: bool = True
+    ble_name: str = "raspi-cam-setup"   # 노트북에서 스캔할 BLE 광고 이름
+    wifi_interface: str = "wlan0"
+
 
 settings = Settings()
