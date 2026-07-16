@@ -112,14 +112,36 @@ python mqtt_camera_client.py
 
 서비스 파일은 하나이고, **설치 방법(A/B)에 따라 `ExecStart` 한 줄만 달라진다.**
 
+**1) nano 로 서비스 파일 생성/수정**
+
+```bash
+sudo nano /etc/systemd/system/mqtt-camera.service
+```
+
+- 파일이 없으면 새로 만들어지고, 있으면 기존 내용이 열린다.
+- 아래 서비스 파일 내용을 그대로 붙여넣는다
+  (SSH 터미널에서는 `Cmd+V` 또는 `Ctrl+Shift+V`).
+- 방향키로 이동하며 `WorkingDirectory`, `ExecStart` 경로를 자기 환경에 맞게 고친다.
+- **저장**: `Ctrl+O` → 파일명 확인 후 `Enter`
+- **종료**: `Ctrl+X`
+- 저장하지 않고 나가려면 `Ctrl+X` → `N`
+
+이미 등록된 서비스 파일을 나중에 수정했다면, 저장 후 반드시
+`sudo systemctl daemon-reload && sudo systemctl restart mqtt-camera` 로 반영한다.
+
+**2) 서비스 파일 내용**
+
 ```ini
 # /etc/systemd/system/mqtt-camera.service
 [Unit]
 Description=MQTT Camera Client (BLE WiFi provisioning + MQTT)
 # network-online.target 을 기다리면 안 된다 — 와이파이가 없을 때
 # BLE 로 SSID/비밀번호를 받아 연결하는 것이 이 프로그램의 첫 단계다.
-After=bluetooth.service dbus.service
-Wants=bluetooth.service
+# 단, nmcli 가 동작하려면 NetworkManager 데몬은 떠 있어야 하므로
+# NetworkManager.service 는 기다린다 (와이파이 연결을 기다리는 게 아니라
+# 데몬 프로세스만 기다리는 것이라 새 장소에서도 부팅이 막히지 않는다).
+After=bluetooth.service dbus.service NetworkManager.service
+Wants=bluetooth.service NetworkManager.service
 
 [Service]
 # 프로젝트를 복제해 둔 실제 경로로 수정
@@ -145,12 +167,14 @@ WantedBy=multi-user.target
 > 방법 B 를 쓴다면 방법 A 의 `ExecStart` 줄을 지우거나 `#` 로 주석 처리하고,
 > 방법 B 줄의 `#` 를 제거하면 된다. `ExecStart` 는 하나만 있어야 한다.
 
+**3) 서비스 등록 및 시작**
+
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now mqtt-camera
 ```
 
-상태/로그 확인:
+**4) 상태/로그 확인**
 
 ```bash
 systemctl status mqtt-camera     # active (running) 확인
@@ -183,8 +207,16 @@ journalctl -u mqtt-camera -f     # 실시간 로그 (BLE 대기 → 와이파이
   ```
 
 연결에 실패하면(`failed` 회신) BLE 서버는 계속 대기하므로 노트북에서 SSID/비밀번호를
-고쳐 바로 재전송하면 된다. 성공하면 `connected` 를 회신한 뒤 BLE 서버를 끄고
-MQTT 클라이언트로 넘어간다.
+고쳐 바로 재전송하면 된다. BLE 서버가 예외로 죽어도 자동으로 다시 뜬다.
+성공하면 `connected` 를 회신한 뒤 BLE 서버를 끄고 MQTT 클라이언트로 넘어간다.
+
+**실행 중 와이파이가 끊긴 경우** — `WIFI_CHECK_INTERVAL` 초(기본 30)마다 와이파이
+상태를 감시하다가 끊김이 감지되면:
+
+1. 30초 동안 NetworkManager 자동 재연결을 기다린다 (일시적 끊김이면 여기서 복구)
+2. 그래도 안 붙으면 BLE 프로비저닝을 다시 열어 노트북에서 **새 와이파이
+   이름/비밀번호를 받을 수 있다** (다른 장소로 옮겼을 때 유용)
+3. 와이파이가 복구되면 MQTT 는 paho 가 자동 재접속하므로 별도 조치가 필요 없다.
 
 ### BLE 설정 (.env)
 
@@ -195,12 +227,39 @@ BLE 관련 값은 `.env` 로 바꿀 수 있다:
 | `BLE_PROVISION` | `true` | 시작 시 BLE 프로비저닝 사용 여부 |
 | `BLE_NAME` | `raspi-cam-setup` | BLE 광고 이름 (노트북 쪽 `RASPI_NAME` 과 동일해야 함) |
 | `WIFI_INTERFACE` | `wlan0` | nmcli 가 사용할 무선 인터페이스 |
+| `WIFI_CHECK_INTERVAL` | `30` | 실행 중 와이파이 끊김 감시 간격(초). 끊기면 BLE 프로비저닝을 다시 연다. `0` 이면 감시 끔 |
 | `SERVICE_UUID` | `8e0d0001-…-3c1f2a5d9e10` | BLE GATT 서비스 UUID |
 | `CREDS_CHAR_UUID` | `8e0d0002-…-3c1f2a5d9e10` | 와이파이 정보(쓰기) 캐릭터리스틱 UUID |
 | `STATUS_CHAR_UUID` | `8e0d0003-…-3c1f2a5d9e10` | 연결 상태 회신(notify) 캐릭터리스틱 UUID |
 
 > ⚠️ UUID 3개는 노트북 쪽 `wifi_manager/.env` 의 같은 이름 항목과 **반드시 동일**해야
 > 한다. 환경변수 이름이 양쪽에서 같으므로 값을 그대로 복사하면 된다.
+
+## 문제 해결: 자동 시작 시 nmcli 오류 (요청 불가 / NetworkManager is not running)
+
+부팅 자동 시작에서만 `nmcli` 가 "요청 불가" 또는
+"NetworkManager 이 실행 중이 아닙니다" 오류를 낸다면,
+서비스가 **NetworkManager 데몬보다 먼저 시작**된 것이다.
+(수동 실행 시에는 부팅이 끝난 뒤라 재현되지 않는다)
+
+유닛 파일 `[Unit]` 에 NetworkManager 의존성이 있는지 확인한다:
+
+```ini
+After=bluetooth.service dbus.service NetworkManager.service
+Wants=bluetooth.service NetworkManager.service
+```
+
+수정 후 반영:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart mqtt-camera
+journalctl -u mqtt-camera -b     # 이번 부팅 로그에서 nmcli 오류가 사라졌는지 확인
+```
+
+> `network-online.target` 을 넣으면 안 된다 — 그건 "네트워크가 연결될 때까지"
+> 기다리는 것이라, 와이파이 정보가 없는 새 장소에서 BLE 프로비저닝 자체가
+> 시작되지 못한다. 여기서 필요한 건 NetworkManager **데몬**이 떠 있는 것뿐이다.
 
 ## 문제 해결: BLE 광고 등록 실패 (dbus 에러)
 

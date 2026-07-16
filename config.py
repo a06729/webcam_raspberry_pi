@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     ble_name: str = "raspi-cam-setup"   # 노트북에서 스캔할 BLE 광고 이름
     wifi_interface: str = "wlan0"
 
+    # 실행 중 와이파이 끊김 감시 간격(초). 끊기면 BLE 프로비저닝을 다시 연다.
+    # 0 이면 감시 비활성 (시작 시 1회만 프로비저닝).
+    wifi_check_interval: int = 30
+
     # BLE GATT UUID — 노트북 쪽(wifi_manager/.env)과 반드시 동일해야 한다.
     # 환경변수 이름(SERVICE_UUID 등)도 wifi_manager 와 같아 값을 그대로 복사하면 된다.
     service_uuid: str = "8e0d0001-7d4f-4f2a-9a6b-3c1f2a5d9e10"

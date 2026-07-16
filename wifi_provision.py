@@ -22,6 +22,7 @@ import asyncio
 import json
 import logging
 import subprocess
+import threading
 import time
 
 from bless import (  # type: ignore[attr-defined]
@@ -255,8 +256,36 @@ def ensure_wifi(boot_wait: float = 15.0) -> None:
         if wifi_is_connected():
             return
 
-    log.info("자동 연결 안 됨 — BLE 프로비저닝 시작")
-    asyncio.run(WifiProvisioner().run())
+    # BLE 프로비저닝 — 와이파이가 연결될 때까지 무한 대기.
+    # 개별 전송 실패(잘못된 비밀번호 등)는 WifiProvisioner 가 failed 를 회신하고
+    # 계속 대기하므로 여기로 오지 않는다. 이 루프는 BLE 서버 자체가 예외로
+    # 죽었을 때(블루투스 스택 오류 등) 서버를 다시 띄우는 안전망이다.
+    while not wifi_is_connected():
+        log.info("자동 연결 안 됨 — BLE 프로비저닝 시작")
+        try:
+            asyncio.run(WifiProvisioner().run())
+        except Exception:
+            log.exception("BLE 프로비저닝 오류 — 5초 후 재시작")
+            time.sleep(5)
+
+
+def wifi_monitor(stop: "threading.Event", interval: float = 30.0,
+                 reconnect_wait: float = 30.0) -> None:
+    """MQTT 동작 중 와이파이 끊김을 감시하는 백그라운드 루프 (스레드에서 실행).
+
+    interval 초마다 와이파이 상태를 확인하고, 끊겨 있으면
+      1. reconnect_wait 초 동안 NetworkManager 자동 재연결을 기다린 뒤
+      2. 그래도 안 붙으면 BLE 프로비저닝을 다시 열어 새 SSID/비밀번호를 받는다.
+    와이파이가 복구되면 다시 감시로 돌아간다 (MQTT 는 paho 가 자동 재접속).
+    """
+    log.info("와이파이 감시 시작 (interval=%.0fs)", interval)
+    while not stop.wait(timeout=interval):
+        if wifi_is_connected():
+            continue
+        log.warning("와이파이 끊김 감지 — 자동 재연결 %.0f초 대기 후 "
+                    "BLE 프로비저닝을 시작합니다", reconnect_wait)
+        ensure_wifi(boot_wait=reconnect_wait)
+        log.info("와이파이 복구 완료 — 감시 재개")
 
 
 if __name__ == "__main__":

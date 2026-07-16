@@ -154,6 +154,16 @@ def main() -> None:
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
 
+    # 실행 중 와이파이 끊김 감시 — 끊기면 BLE 프로비저닝을 다시 열어
+    # 새 SSID/비밀번호를 받는다. 복구되면 paho 가 MQTT 를 자동 재접속한다.
+    if settings.ble_provision and settings.wifi_check_interval > 0:
+        from wifi_provision import wifi_monitor
+        threading.Thread(
+            target=wifi_monitor,
+            args=(client._stop, float(settings.wifi_check_interval)),
+            daemon=True,
+        ).start()
+
     # 주기적 online 하트비트
     if settings.status_interval > 0:
         threading.Thread(target=client._heartbeat_loop, daemon=True).start()
