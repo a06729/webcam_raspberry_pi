@@ -59,14 +59,48 @@ STATUS_CHAR_UUID=<STATUS_CHAR_UUID 값>
 
 ## 설치 (라즈베리파이에서)
 
+공통 준비:
+
 ```bash
 sudo apt install -y python3-picamera2        # 카메라 모듈 사용 시
-pip install -r requirements.txt
 cp .env.example .env                          # 브로커 주소·device_key 수정
 ```
 
-USB 웹캠을 쓰려면 `.env` 에서 `CAMERA_BACKEND=usb` 로 바꾸고
+파이썬 패키지는 아래 **두 가지 방법 중 하나**로 설치한다.
+어느 쪽을 쓰느냐에 따라 뒤의 systemd `ExecStart` 경로가 달라진다.
+
+### 방법 A — 시스템 파이썬에 설치 (venv 없이)
+
+```bash
+pip install --break-system-packages bless paho-mqtt pydantic-settings requests
+```
+
+- 실행: `python3 mqtt_camera_client.py`
+- Raspberry Pi OS Bookworm 부터는 시스템 파이썬에 pip 설치가 기본 차단되어
+  `--break-system-packages` 플래그가 필요하다.
+- apt 로 설치한 `picamera2` 를 별도 설정 없이 바로 쓸 수 있다.
+
+### 방법 B — .venv 가상환경에 설치 (권장)
+
+```bash
+# picamera2(apt 패키지)를 venv 안에서도 쓸 수 있도록 --system-site-packages 필수
+python3 -m venv --system-site-packages .venv
+source .venv/bin/activate
+pip install bless paho-mqtt pydantic-settings requests
+```
+
+- 실행: `.venv/bin/python mqtt_camera_client.py` (또는 activate 후 `python mqtt_camera_client.py`)
+- 시스템 파이썬을 오염시키지 않아 다른 프로젝트와 충돌이 없다.
+- ⚠️ `--system-site-packages` 없이 만든 venv 에서는 `picamera2` import 가 실패한다.
+  이미 만든 venv 가 있다면 다음으로 확인하고, 실패하면 지우고 다시 만든다:
+
+  ```bash
+  .venv/bin/python -c "import picamera2; print('OK')"
+  ```
+
+USB 웹캠을 쓰는 경우(두 방법 공통): `.env` 에서 `CAMERA_BACKEND=usb` 로 바꾸고
 `pip install opencv-python-headless` 를 추가로 설치한다.
+(usb 백엔드만 쓰면 picamera2 는 필요 없다)
 
 ## 실행
 
@@ -75,6 +109,8 @@ python mqtt_camera_client.py
 ```
 
 ### 부팅 시 자동 실행 (systemd)
+
+서비스 파일은 하나이고, **설치 방법(A/B)에 따라 `ExecStart` 한 줄만 달라진다.**
 
 ```ini
 # /etc/systemd/system/mqtt-camera.service
@@ -88,9 +124,16 @@ Wants=bluetooth.service
 [Service]
 # 프로젝트를 복제해 둔 실제 경로로 수정
 WorkingDirectory=/home/pi/esp32_app/raspberry_pi_webcam
+
+# ── 방법 A(시스템 파이썬)로 설치한 경우 ──
 ExecStart=/usr/bin/python3 mqtt_camera_client.py
+
+# ── 방법 B(.venv)로 설치한 경우 — 위 줄 대신 이 줄 사용 ──
+# venv 의 python 절대경로를 지정하면 activate 없이 그 가상환경으로 실행된다.
+#ExecStart=/home/pi/esp32_app/raspberry_pi_webcam/.venv/bin/python mqtt_camera_client.py
+
 # BLE GATT 서버(bless)가 시스템 D-Bus(BlueZ)에 등록하고 nmcli 로
-# 와이파이 프로필을 만들려면 root 권한이 필요하다.
+# 와이파이 프로필을 만들려면 root 권한이 필요하다. (A/B 공통)
 User=root
 Restart=always
 RestartSec=5
@@ -98,6 +141,9 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 ```
+
+> 방법 B 를 쓴다면 방법 A 의 `ExecStart` 줄을 지우거나 `#` 로 주석 처리하고,
+> 방법 B 줄의 `#` 를 제거하면 된다. `ExecStart` 는 하나만 있어야 한다.
 
 ```bash
 sudo systemctl daemon-reload
