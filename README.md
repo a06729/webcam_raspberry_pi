@@ -74,26 +74,41 @@ USB 웹캠을 쓰려면 `.env` 에서 `CAMERA_BACKEND=usb` 로 바꾸고
 python mqtt_camera_client.py
 ```
 
-부팅 시 자동 실행하려면 systemd 서비스 예시:
+### 부팅 시 자동 실행 (systemd)
 
 ```ini
 # /etc/systemd/system/mqtt-camera.service
 [Unit]
-Description=MQTT Camera Client
-After=network-online.target
+Description=MQTT Camera Client (BLE WiFi provisioning + MQTT)
+# network-online.target 을 기다리면 안 된다 — 와이파이가 없을 때
+# BLE 로 SSID/비밀번호를 받아 연결하는 것이 이 프로그램의 첫 단계다.
+After=bluetooth.service dbus.service
+Wants=bluetooth.service
 
 [Service]
-WorkingDirectory=/home/pi/esp32_app/raspberry_pi
+# 프로젝트를 복제해 둔 실제 경로로 수정
+WorkingDirectory=/home/pi/esp32_app/raspberry_pi_webcam
 ExecStart=/usr/bin/python3 mqtt_camera_client.py
+# BLE GATT 서버(bless)가 시스템 D-Bus(BlueZ)에 등록하고 nmcli 로
+# 와이파이 프로필을 만들려면 root 권한이 필요하다.
+User=root
 Restart=always
-User=pi
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
 ```
 
 ```bash
+sudo systemctl daemon-reload
 sudo systemctl enable --now mqtt-camera
+```
+
+상태/로그 확인:
+
+```bash
+systemctl status mqtt-camera     # active (running) 확인
+journalctl -u mqtt-camera -f     # 실시간 로그 (BLE 대기 → 와이파이 연결 → MQTT)
 ```
 
 ## BLE 와이파이 프로비저닝
