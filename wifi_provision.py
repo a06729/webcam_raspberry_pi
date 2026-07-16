@@ -64,26 +64,55 @@ def wifi_is_connected() -> bool:
 
 
 def connect_wifi(ssid: str, password: str) -> tuple[bool, str]:
-    """nmcli 로 와이파이 연결 시도. (성공 여부, 메시지) 반환."""
+    """nmcli 로 와이파이 연결 시도. (성공 여부, 메시지) 반환.
+
+    'nmcli device wifi connect' 는 스캔 캐시에 SSID 가 없으면 보안 방식
+    (key-mgmt)을 알 수 없어 실패하므로, 보안 방식을 명시한 연결 프로필을
+    직접 만들어 활성화한다. 숨김 SSID 도 함께 지원된다.
+    """
     log.info("와이파이 연결 시도: %r", ssid)
+
+    # 같은 이름의 이전 프로필이 있으면 제거 (재시도 시 잔여 설정 충돌 방지)
     subprocess.run(
-        ["nmcli", "device", "wifi", "rescan"],
-        capture_output=True, text=True, timeout=30,
+        ["nmcli", "connection", "delete", ssid],
+        capture_output=True, text=True, timeout=15,
     )
 
-    cmd = ["nmcli", "device", "wifi", "connect", ssid,
-           "ifname", settings.wifi_interface]
+    cmd = [
+        "nmcli", "connection", "add", "type", "wifi",
+        "ifname", settings.wifi_interface,
+        "con-name", ssid,
+        "ssid", ssid,
+        "connection.autoconnect", "yes",
+        # 스캔에 안 잡혀도(숨김 포함) SSID 를 직접 지정해 접속하도록
+        "802-11-wireless.hidden", "yes",
+    ]
     if password:
-        cmd += ["password", password]
+        cmd += [
+            "802-11-wireless-security.key-mgmt", "wpa-psk",
+            "802-11-wireless-security.psk", password,
+        ]
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout).strip()
+            log.error("프로필 생성 실패: %s", detail)
+            return False, detail
+
+        up = subprocess.run(
+            ["nmcli", "connection", "up", ssid],
+            capture_output=True, text=True, timeout=90,
+        )
     except subprocess.TimeoutExpired:
         return False, "nmcli timeout"
 
-    if result.returncode != 0:
-        detail = (result.stderr or result.stdout).strip()
+    if up.returncode != 0:
+        detail = (up.stderr or up.stdout).strip()
         log.error("와이파이 연결 실패: %s", detail)
+        # 실패한 프로필은 남겨두지 않는다 (autoconnect 로 재시도 반복 방지)
+        subprocess.run(["nmcli", "connection", "delete", ssid],
+                       capture_output=True, text=True, timeout=15)
         return False, detail
 
     log.info("와이파이 연결 성공: %r", ssid)

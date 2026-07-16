@@ -94,7 +94,8 @@
       "Bash(grep -viE \"^\\\\s*$\")",
       "Bash(hciconfig hci0 *)",
       "Bash(xargs -I{} echo \"광고 등록 실패 로그: {} 건\")",
-      "Bash(grep -vE \"^\\\\s*$\")"
+      "Bash(grep -vE \"^\\\\s*$\")",
+      "Bash(git rm *)"
     ]
   }
 }
