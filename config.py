@@ -49,5 +49,11 @@ class Settings(BaseSettings):
     ble_name: str = "raspi-cam-setup"   # 노트북에서 스캔할 BLE 광고 이름
     wifi_interface: str = "wlan0"
 
+    # BLE GATT UUID — 노트북 쪽(wifi_manager/.env)과 반드시 동일해야 한다.
+    # 환경변수 이름(SERVICE_UUID 등)도 wifi_manager 와 같아 값을 그대로 복사하면 된다.
+    service_uuid: str = "8e0d0001-7d4f-4f2a-9a6b-3c1f2a5d9e10"
+    creds_char_uuid: str = "8e0d0002-7d4f-4f2a-9a6b-3c1f2a5d9e10"   # write: 와이파이 정보 수신
+    status_char_uuid: str = "8e0d0003-7d4f-4f2a-9a6b-3c1f2a5d9e10"  # read/notify: 연결 상태 회신
+
 
 settings = Settings()

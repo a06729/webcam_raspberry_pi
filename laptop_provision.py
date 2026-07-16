@@ -15,14 +15,19 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 
 from bleak import BleakClient, BleakScanner
 
 # 라즈베리파이 쪽(wifi_provision.py)과 반드시 동일해야 한다.
-SERVICE_UUID = "8e0d0001-7d4f-4f2a-9a6b-3c1f2a5d9e10"
-CREDS_CHAR_UUID = "8e0d0002-7d4f-4f2a-9a6b-3c1f2a5d9e10"
-STATUS_CHAR_UUID = "8e0d0003-7d4f-4f2a-9a6b-3c1f2a5d9e10"
+# 환경변수로 덮어쓸 수 있다 (라즈베리파이 .env 와 같은 이름).
+SERVICE_UUID = os.getenv(
+    "SERVICE_UUID", "8e0d0001-7d4f-4f2a-9a6b-3c1f2a5d9e10").lower()
+CREDS_CHAR_UUID = os.getenv(
+    "CREDS_CHAR_UUID", "8e0d0002-7d4f-4f2a-9a6b-3c1f2a5d9e10").lower()
+STATUS_CHAR_UUID = os.getenv(
+    "STATUS_CHAR_UUID", "8e0d0003-7d4f-4f2a-9a6b-3c1f2a5d9e10").lower()
 
 CHUNK_SIZE = 100          # BLE MTU 보다 넉넉히 작게 잘라 전송
 RESULT_TIMEOUT = 150      # 와이파이 연결 결과 대기 시간(초, 파이 쪽 최악 소요보다 여유 있게)

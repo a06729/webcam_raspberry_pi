@@ -89,12 +89,29 @@ sudo systemctl enable --now mqtt-camera
 ## BLE 와이파이 프로비저닝
 
 와이파이가 안 붙어 있으면 시작 시 BLE 로 SSID/비밀번호를 받아서 연결한다.
-파이에서 `mqtt_camera_client.py` 를 띄워두고, 노트북에서:
+파이에서 `mqtt_camera_client.py` 를 띄워두고, 노트북에서 GUI(`wifi_manager/wifi_manager_gui.py`)를
+실행하거나 CLI 로:
 
 ```bash
 pip install bleak
 python laptop_provision.py --ssid "MyWifi" --password "secret123"
 ```
+
+### BLE 설정 (.env)
+
+BLE 관련 값은 `.env` 로 바꿀 수 있다:
+
+| 항목 | 기본값 | 설명 |
+|---|---|---|
+| `BLE_PROVISION` | `true` | 시작 시 BLE 프로비저닝 사용 여부 |
+| `BLE_NAME` | `raspi-cam-setup` | BLE 광고 이름 (노트북 쪽 `RASPI_NAME` 과 동일해야 함) |
+| `WIFI_INTERFACE` | `wlan0` | nmcli 가 사용할 무선 인터페이스 |
+| `SERVICE_UUID` | `8e0d0001-…-3c1f2a5d9e10` | BLE GATT 서비스 UUID |
+| `CREDS_CHAR_UUID` | `8e0d0002-…-3c1f2a5d9e10` | 와이파이 정보(쓰기) 캐릭터리스틱 UUID |
+| `STATUS_CHAR_UUID` | `8e0d0003-…-3c1f2a5d9e10` | 연결 상태 회신(notify) 캐릭터리스틱 UUID |
+
+> ⚠️ UUID 3개는 노트북 쪽 `wifi_manager/.env` 의 같은 이름 항목과 **반드시 동일**해야
+> 한다. 환경변수 이름이 양쪽에서 같으므로 값을 그대로 복사하면 된다.
 
 ## 문제 해결: BLE 광고 등록 실패 (dbus 에러)
 

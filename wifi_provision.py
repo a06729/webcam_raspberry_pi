@@ -35,10 +35,11 @@ from config import settings
 
 log = logging.getLogger("wifi-provision")
 
-# 노트북 스크립트(laptop_provision.py)와 반드시 동일해야 한다.
-SERVICE_UUID = "8e0d0001-7d4f-4f2a-9a6b-3c1f2a5d9e10"
-CREDS_CHAR_UUID = "8e0d0002-7d4f-4f2a-9a6b-3c1f2a5d9e10"   # write: 와이파이 정보 수신
-STATUS_CHAR_UUID = "8e0d0003-7d4f-4f2a-9a6b-3c1f2a5d9e10"  # read/notify: 연결 상태 회신
+# 노트북 쪽(wifi_manager/wifi_manager_gui.py, laptop_provision.py)과 반드시
+# 동일해야 한다. .env 파일(SERVICE_UUID 등, config.py 참고)로 덮어쓸 수 있다.
+SERVICE_UUID = settings.service_uuid.lower()
+CREDS_CHAR_UUID = settings.creds_char_uuid.lower()   # write: 와이파이 정보 수신
+STATUS_CHAR_UUID = settings.status_char_uuid.lower()  # read/notify: 연결 상태 회신
 
 
 # ------------------------------------------------------------------ #
