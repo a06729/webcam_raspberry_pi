@@ -86,6 +86,96 @@ WantedBy=multi-user.target
 sudo systemctl enable --now mqtt-camera
 ```
 
+## BLE 와이파이 프로비저닝
+
+와이파이가 안 붙어 있으면 시작 시 BLE 로 SSID/비밀번호를 받아서 연결한다.
+파이에서 `mqtt_camera_client.py` 를 띄워두고, 노트북에서:
+
+```bash
+pip install bleak
+python laptop_provision.py --ssid "MyWifi" --password "secret123"
+```
+
+## 문제 해결: BLE 광고 등록 실패 (dbus 에러)
+
+### 증상
+
+`wifi_provision.py` 의 BLE 서버가 시작하자마자 죽는다:
+
+```
+dbus_next.errors.DBusError: Failed to register advertisement
+```
+
+`bluetoothctl advertise on` 도 똑같이 실패하고, `journalctl -u bluetooth` 에는:
+
+```
+Failed to add advertisement: Invalid Parameters (0x0d)
+```
+
+### 원인
+
+파이썬 코드나 bless 의 문제가 아니라 **BlueZ 5.82 + 커널 6.18 조합의 시스템 버그**다.
+
+BlueZ 5.82 의 `src/advertising.c` `add_adv_params_callback()` 은
+`MGMT_OP_ADD_EXT_ADV_DATA` 명령의 길이를 `sizeof(struct mgmt_cp_add_advertising)`
+(헤더 11바이트) 로 계산하는데, 실제로 보내는 구조체는 헤더가 3바이트인
+`struct mgmt_cp_add_ext_adv_data` 다. 즉 **항상 8바이트를 초과해서** 커널에 넘긴다.
+
+예전 커널은 이걸 눈감아 줬지만, 리눅스 6.18 이 이 명령의 길이를 정확히 검증하기
+시작하면서(8바이트 slab OOB read 보안 수정) `Invalid Parameters (0x0d)` 로 거부한다.
+결과적으로 **이 조합에서는 모든 LE 주변장치 광고가 실패**한다.
+
+### 해결
+
+upstream 과 동일하게 `sizeof(*cp)` 로 고쳐서 bluez 를 다시 빌드했다.
+
+```bash
+# deb-src 저장소 추가 (/etc/apt/sources.list.d/raspi-src.sources)
+#   Types: deb-src
+#   URIs: http://archive.raspberrypi.com/debian/
+#   Suites: trixie
+#   Components: main
+#   Signed-By: /usr/share/keyrings/raspberrypi-archive-keyring.pgp
+
+sudo apt update
+sudo apt build-dep -y bluez
+apt-get source bluez
+cd bluez-5.82
+```
+
+`src/advertising.c` 의 `add_adv_params_callback()` 안(1443행 부근):
+
+```diff
+-	param_len = sizeof(struct mgmt_cp_add_advertising) + adv_data_len +
+-							scan_rsp_len;
++	param_len = sizeof(*cp) + adv_data_len + scan_rsp_len;
+```
+
+> 같은 파일 985행(`refresh_legacy_adv`)에도 똑같은 표현이 있지만 그쪽은 실제로
+> `struct mgmt_cp_add_advertising` 을 쓰는 구형 경로라 **정상이다. 건드리면 안 된다.**
+
+```bash
+DEB_BUILD_OPTIONS="nocheck parallel=4" dpkg-buildpackage -b -uc -us
+sudo dpkg -i ../bluez_5.82-1.1+rpt1+extadvfix1_arm64.deb
+sudo apt-mark hold bluez        # apt 가 깨진 배포판 버전으로 되돌리지 않도록 고정
+sudo systemctl restart bluetooth
+```
+
+### 확인
+
+```bash
+dpkg -l bluez | tail -1          # 5.82-1.1+rpt1+extadvfix1, 상태 'hi' (hold)
+bluetoothctl advertise on        # 에러 없이 등록되면 정상
+```
+
+### 재발 시
+
+- `Failed to register advertisement` 가 다시 나오면 `journalctl -u bluetooth | grep "Failed to add advertisement"` 로 사유부터 확인한다.
+  `Invalid Parameters (0x0d)` 면 hold 가 풀려 배포판 버전으로 되돌아간 것이다.
+- `No Resources (0x07)` 은 **다른 문제**다. 광고 슬롯이 남아 있는 것이라
+  `sudo systemctl restart bluetooth` 로 정리된다.
+- 배포판이 고쳐진 bluez 를 내놓으면 `sudo apt-mark unhold bluez` 로 풀고 로컬 빌드를 버린다.
+
 ## 테스트
 
 서버 없이 브로커만으로 확인:
