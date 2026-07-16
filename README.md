@@ -364,6 +364,21 @@ bluetoothctl advertise on        # 에러 없이 등록되면 정상
   `sudo systemctl restart bluetooth` 로 정리된다.
 - 배포판이 고쳐진 bluez 를 내놓으면 `sudo apt-mark unhold bluez` 로 풀고 로컬 빌드를 버린다.
 
+### 재프로비저닝(와이파이 끊김 후)에서만 실패하는 경우
+
+부팅 시 첫 프로비저닝은 되는데, 실행 중 와이파이가 끊겨 BLE 를 **다시** 열 때만
+`Failed to register advertisement` 가 난다면 두 가지를 확인한다:
+
+1. **프로그램이 두 개 떠 있지 않은지** — systemd 서비스가 돌고 있는 상태에서
+   수동으로 `python mqtt_camera_client.py` 를 또 실행하면 두 프로세스가 광고
+   슬롯을 두고 충돌한다. `systemctl stop mqtt-camera` 후 수동 실행하거나,
+   수동 실행을 끄고 서비스만 쓴다.
+2. **이전 세션 잔여물** — 예전 코드에는 BLE 서버 시작이 실패하면 D-Bus 에
+   등록된 GATT 앱/광고가 정리되지 않고 남아 이후 재시도가 전부 실패하는
+   버그가 있었다 (현재 코드는 세션 종료·실패 시 D-Bus 연결을 완전히 끊어
+   BlueZ 가 잔여물을 자동 회수하도록 수정됨). 급하게 복구하려면
+   `sudo systemctl restart bluetooth` 후 서비스를 재시작한다.
+
 ## 테스트
 
 서버 없이 브로커만으로 확인:

@@ -121,7 +121,8 @@
       "Bash(SERVICE_UUID=BBBB0001-0000-0000-0000-000000000000 /private/tmp/claude-501/-Users-jeongjongmin-esp32-app-raspberry-pi-webcam/9b182de7-91a4-4228-b9a3-7962307dfb43/scratchpad/simenv/bin/python -c ' *)",
       "Bash(/private/tmp/claude-501/-Users-jeongjongmin-esp32-app-raspberry-pi-webcam/9b182de7-91a4-4228-b9a3-7962307dfb43/scratchpad/simenv/bin/python -m py_compile /Users/jeongjongmin/esp32_app/raspberry_pi_webcam/laptop_provision.py /Users/jeongjongmin/esp32_app/raspberry_pi_webcam/config.py /Users/jeongjongmin/esp32_app/raspberry_pi_webcam/wifi_provision.py)",
       "Bash(/private/tmp/claude-501/-Users-jeongjongmin-esp32-app-raspberry-pi-webcam/9b182de7-91a4-4228-b9a3-7962307dfb43/scratchpad/simenv/bin/python -m py_compile /Users/jeongjongmin/esp32_app/raspberry_pi_webcam/wifi_provision.py /Users/jeongjongmin/esp32_app/raspberry_pi_webcam/mqtt_camera_client.py /Users/jeongjongmin/esp32_app/raspberry_pi_webcam/config.py)",
-      "Bash(/private/tmp/claude-501/-Users-jeongjongmin-esp32-app-raspberry-pi-webcam/9b182de7-91a4-4228-b9a3-7962307dfb43/scratchpad/simenv/bin/python -m py_compile /Users/jeongjongmin/esp32_app/raspberry_pi_webcam/wifi_provision.py /Users/jeongjongmin/esp32_app/raspberry_pi_webcam/laptop_provision.py /Users/jeongjongmin/esp32_app/wifi_manager/wifi_manager_gui.py)"
+      "Bash(/private/tmp/claude-501/-Users-jeongjongmin-esp32-app-raspberry-pi-webcam/9b182de7-91a4-4228-b9a3-7962307dfb43/scratchpad/simenv/bin/python -m py_compile /Users/jeongjongmin/esp32_app/raspberry_pi_webcam/wifi_provision.py /Users/jeongjongmin/esp32_app/raspberry_pi_webcam/laptop_provision.py /Users/jeongjongmin/esp32_app/wifi_manager/wifi_manager_gui.py)",
+      "Bash(/private/tmp/claude-501/-Users-jeongjongmin-esp32-app-raspberry-pi-webcam/9b182de7-91a4-4228-b9a3-7962307dfb43/scratchpad/simenv/bin/python -m py_compile /Users/jeongjongmin/esp32_app/raspberry_pi_webcam/wifi_provision.py)"
     ]
   }
 }

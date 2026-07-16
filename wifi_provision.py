@@ -269,14 +269,32 @@ class WifiProvisioner:
             GATTAttributePermissions.readable,
         )
 
-        await self._server.start()
-        log.info("BLE 프로비저닝 대기 중 — 기기 이름: %r", settings.ble_name)
-        watchdog = asyncio.create_task(self._wifi_watchdog())
+        watchdog: asyncio.Task | None = None
         try:
+            # start()(광고 등록)가 실패해도 아래 finally 에서 반드시 정리한다.
+            # 정리 없이 빠져나가면 등록된 GATT 앱/광고가 D-Bus 연결과 함께
+            # 프로세스에 남아, 이후 재시도가 전부
+            # "Failed to register advertisement" 로 실패한다.
+            await self._server.start()
+            log.info("BLE 프로비저닝 대기 중 — 기기 이름: %r", settings.ble_name)
+            watchdog = asyncio.create_task(self._wifi_watchdog())
             await self._connected.wait()
         finally:
-            watchdog.cancel()
-            await self._server.stop()
+            if watchdog is not None:
+                watchdog.cancel()
+            try:
+                await self._server.stop()
+            except Exception as exc:
+                log.warning("BLE 서버 정지 중 오류 (무시): %s", exc)
+            # bless 는 stop() 후에도 D-Bus 연결을 유지한다. 연결을 직접 끊어야
+            # BlueZ 가 이 연결로 등록된 GATT 앱/광고를 전부 회수해서,
+            # 다음 프로비저닝 세션의 광고 등록이 실패하지 않는다.
+            bus = getattr(self._server, "bus", None)  # BlueZ 백엔드에만 존재
+            if bus is not None:
+                try:
+                    bus.disconnect()
+                except Exception as exc:
+                    log.warning("D-Bus 연결 해제 중 오류 (무시): %s", exc)
             log.info("BLE 서버 종료")
 
 
