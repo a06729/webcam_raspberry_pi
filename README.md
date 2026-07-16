@@ -41,6 +41,16 @@ CAMERA_HEIGHT=720
 
 # online 하트비트 간격(초), 0이면 끔
 STATUS_INTERVAL=60
+
+# BLE 와이파이 프로비저닝 (자세한 설명은 아래 "BLE 와이파이 프로비저닝" 절 참고)
+BLE_PROVISION=true
+BLE_NAME=raspi-cam-setup
+WIFI_INTERFACE=wlan0
+
+# BLE GATT UUID — 노트북 쪽(wifi_manager/.env)의 같은 이름 항목과 반드시 동일해야 함
+SERVICE_UUID=<SERVICE_UUID 값>
+CREDS_CHAR_UUID=<CREDS_CHAR_UUID 값>
+STATUS_CHAR_UUID=<STATUS_CHAR_UUID 값>
 ```
 
 `MQTT_BROKER`, `API_BASE_URL` 은 실제 브로커/서버 주소로 바꿔야 하며,
@@ -88,14 +98,32 @@ sudo systemctl enable --now mqtt-camera
 
 ## BLE 와이파이 프로비저닝
 
-와이파이가 안 붙어 있으면 시작 시 BLE 로 SSID/비밀번호를 받아서 연결한다.
-파이에서 `mqtt_camera_client.py` 를 띄워두고, 노트북에서 GUI(`wifi_manager/wifi_manager_gui.py`)를
-실행하거나 CLI 로:
+와이파이가 안 붙어 있으면 시작 시 BLE GATT 서버(`wifi_provision.py`)를 띄우고,
+노트북에서 보내주는 SSID/비밀번호로 와이파이를 연결한 뒤 MQTT 로 진행한다.
+이미 와이파이가 연결돼 있으면 이 단계는 건너뛴다.
 
-```bash
-pip install bleak
-python laptop_provision.py --ssid "MyWifi" --password "secret123"
 ```
+┌──────────────────┐   BLE (SSID/비밀번호 JSON)   ┌──────────────────┐   nmcli    ┌────────┐
+│ 노트북            │ ───────────────────────────▶ │ 라즈베리파이      │ ─────────▶ │ 와이파이 │
+│ wifi_manager GUI │ ◀─────────────────────────── │ wifi_provision.py│            └────────┘
+└──────────────────┘   상태 회신 (connecting /     └──────────────────┘
+                       connected / failed)
+```
+
+파이에서 `mqtt_camera_client.py` 를 띄워두고, 노트북에서 둘 중 하나로 전송한다:
+
+- **GUI**: `wifi_manager/wifi_manager_gui.py` 실행 → 스캔 → 기기 선택 → SSID/비밀번호 입력 → 전송
+  (자세한 사용법은 `wifi_manager/README.md` 참고)
+- **CLI**:
+
+  ```bash
+  pip install bleak
+  python laptop_provision.py --ssid "MyWifi" --password "secret123"
+  ```
+
+연결에 실패하면(`failed` 회신) BLE 서버는 계속 대기하므로 노트북에서 SSID/비밀번호를
+고쳐 바로 재전송하면 된다. 성공하면 `connected` 를 회신한 뒤 BLE 서버를 끄고
+MQTT 클라이언트로 넘어간다.
 
 ### BLE 설정 (.env)
 
