@@ -65,14 +65,35 @@ def wifi_is_connected() -> bool:
     return False
 
 
-def connect_wifi(ssid: str, password: str) -> tuple[bool, str]:
+def _failure_hint(detail: str) -> str:
+    """nmcli 오류 메시지에 사용자용 힌트를 덧붙인다."""
+    lower = detail.lower()
+    if "secrets" in lower or "802.1x" in lower or "인증" in detail:
+        return "비밀번호가 틀렸을 가능성이 큽니다. 확인 후 다시 전송하세요. / " + detail
+    if "not find" in lower or "not found" in lower or "no network" in lower \
+            or "찾을 수 없" in detail:
+        return ("와이파이를 찾지 못했습니다. SSID 오타, 2.4GHz 대역 여부"
+                "(파이 모델에 따라 5GHz 미지원)를 확인하세요. / " + detail)
+    return detail
+
+
+def connect_wifi(ssid: str, password: str,
+                 attempts: int = 3, retry_delay: float = 3.0) -> tuple[bool, str]:
     """nmcli 로 와이파이 연결 시도. (성공 여부, 메시지) 반환.
 
     'nmcli device wifi connect' 는 스캔 캐시에 SSID 가 없으면 보안 방식
     (key-mgmt)을 알 수 없어 실패하므로, 보안 방식을 명시한 연결 프로필을
     직접 만들어 활성화한다. 숨김 SSID 도 함께 지원된다.
+
+    활성화는 최대 attempts 회 재시도한다. 라즈베리파이는 BLE 와 와이파이가
+    안테나를 공유해서, 노트북과 BLE 가 연결된 상태(프로비저닝 중)나 부팅
+    직후에는 첫 활성화가 일시적으로 실패하는 일이 잦기 때문이다.
     """
     log.info("와이파이 연결 시도: %r", ssid)
+
+    # 와이파이 라디오가 꺼져 있으면 켠다 (실패해도 무시)
+    subprocess.run(["nmcli", "radio", "wifi", "on"],
+                   capture_output=True, text=True, timeout=10)
 
     # 같은 이름의 이전 프로필이 있으면 제거 (재시도 시 잔여 설정 충돌 방지)
     subprocess.run(
@@ -97,28 +118,47 @@ def connect_wifi(ssid: str, password: str) -> tuple[bool, str]:
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        if result.returncode != 0:
-            detail = (result.stderr or result.stdout).strip()
-            log.error("프로필 생성 실패: %s", detail)
-            return False, detail
-
-        up = subprocess.run(
-            ["nmcli", "connection", "up", ssid],
-            capture_output=True, text=True, timeout=90,
-        )
     except subprocess.TimeoutExpired:
-        return False, "nmcli timeout"
-
-    if up.returncode != 0:
-        detail = (up.stderr or up.stdout).strip()
-        log.error("와이파이 연결 실패: %s", detail)
-        # 실패한 프로필은 남겨두지 않는다 (autoconnect 로 재시도 반복 방지)
-        subprocess.run(["nmcli", "connection", "delete", ssid],
-                       capture_output=True, text=True, timeout=15)
+        return False, "nmcli timeout (connection add)"
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        log.error("프로필 생성 실패: %s", detail)
         return False, detail
 
-    log.info("와이파이 연결 성공: %r", ssid)
-    return True, f"connected to {ssid}"
+    detail = ""
+    for attempt in range(1, attempts + 1):
+        if attempt > 1:
+            # 무선 스택을 정리할 시간을 주고 스캔을 갱신한 뒤 재시도
+            time.sleep(retry_delay)
+            subprocess.run(
+                ["nmcli", "device", "wifi", "rescan",
+                 "ifname", settings.wifi_interface],
+                capture_output=True, text=True, timeout=15,
+            )
+            time.sleep(2)
+
+        try:
+            up = subprocess.run(
+                ["nmcli", "connection", "up", ssid],
+                capture_output=True, text=True, timeout=60,
+            )
+        except subprocess.TimeoutExpired:
+            detail = "nmcli timeout (connection up)"
+            log.warning("활성화 시간 초과 (%d/%d회)", attempt, attempts)
+            continue
+
+        if up.returncode == 0:
+            log.info("와이파이 연결 성공: %r (%d회째 시도)", ssid, attempt)
+            return True, f"connected to {ssid}"
+
+        detail = (up.stderr or up.stdout).strip()
+        log.warning("활성화 실패 (%d/%d회): %s", attempt, attempts, detail)
+
+    log.error("와이파이 연결 실패 (%d회 모두): %s", attempts, detail)
+    # 실패한 프로필은 남겨두지 않는다 (autoconnect 로 재시도 반복 방지)
+    subprocess.run(["nmcli", "connection", "delete", ssid],
+                   capture_output=True, text=True, timeout=15)
+    return False, _failure_hint(detail)
 
 
 # ------------------------------------------------------------------ #

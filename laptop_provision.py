@@ -30,7 +30,7 @@ STATUS_CHAR_UUID = os.getenv(
     "STATUS_CHAR_UUID", "8e0d0003-7d4f-4f2a-9a6b-3c1f2a5d9e10").lower()
 
 CHUNK_SIZE = 100          # BLE MTU 보다 넉넉히 작게 잘라 전송
-RESULT_TIMEOUT = 150      # 와이파이 연결 결과 대기 시간(초, 파이 쪽 최악 소요보다 여유 있게)
+RESULT_TIMEOUT = 300      # 와이파이 연결 결과 대기 시간(초, 파이 쪽 재시도 3회보다 여유 있게)
 
 
 async def find_device(name: str, timeout: float = 15.0):
