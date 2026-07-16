@@ -128,6 +128,7 @@ class WifiProvisioner:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._buffer = bytearray()          # '\n' 까지 수신 데이터 누적
         self._connected = asyncio.Event()   # 와이파이 연결 성공 시 set
+        self._busy = False                  # BLE 로 받은 자격증명으로 연결 시도 중
 
     # --- BLE 콜백 (bless 이벤트 루프에서 호출) --------------------- #
     def _on_read(self, characteristic: BlessGATTCharacteristic, **kwargs) -> bytearray:
@@ -160,16 +161,23 @@ class WifiProvisioner:
 
     # --- 와이파이 연결 → 결과 회신 --------------------------------- #
     async def _connect_and_report(self, ssid: str, password: str) -> None:
-        self._notify_status("connecting", f"trying {ssid}")
-        # nmcli 는 블로킹이므로 스레드로 분리 (BLE 응답이 멈추지 않도록)
-        ok, detail = await asyncio.to_thread(connect_wifi, ssid, password)
-        if ok:
-            self._notify_status("connected", detail)
-            # 노트북이 notify 를 받을 시간을 준 뒤 종료
-            await asyncio.sleep(2)
-            self._connected.set()
-        else:
-            self._notify_status("failed", detail)  # 노트북이 재전송 가능
+        # 시도 중에는 watchdog 이 먼저 종료시키지 못하게 막는다.
+        # (연결 성공 직후 watchdog 이 _connected 를 set 하면 'connected' 회신
+        #  notify 가 나가기 전에 BLE 서버가 꺼져 노트북이 실패로 오인한다)
+        self._busy = True
+        try:
+            self._notify_status("connecting", f"trying {ssid}")
+            # nmcli 는 블로킹이므로 스레드로 분리 (BLE 응답이 멈추지 않도록)
+            ok, detail = await asyncio.to_thread(connect_wifi, ssid, password)
+            if ok:
+                self._notify_status("connected", detail)
+                # 노트북이 notify 를 받을 시간을 준 뒤 종료
+                await asyncio.sleep(2)
+                self._connected.set()
+            else:
+                self._notify_status("failed", detail)  # 노트북이 재전송 가능
+        finally:
+            self._busy = False
 
     def _notify_status(self, status: str, detail: str = "") -> None:
         payload = json.dumps({"status": status, "detail": detail}).encode("utf-8")
@@ -189,7 +197,9 @@ class WifiProvisioner:
         """
         while not self._connected.is_set():
             await asyncio.sleep(interval)
-            if await asyncio.to_thread(wifi_is_connected):
+            if self._busy:
+                continue  # BLE 프로비저닝 진행 중 — 회신은 _connect_and_report 가 담당
+            if await asyncio.to_thread(wifi_is_connected) and not self._busy:
                 log.info("와이파이가 자동으로 연결됨 — 프로비저닝 종료")
                 self._connected.set()
 
